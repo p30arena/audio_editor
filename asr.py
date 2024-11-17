@@ -10,11 +10,28 @@ import torch
 import os
 import librosa
 import soundfile as sf
+import subprocess
 
 whisper_model = None
 
 def flatten(xss):
     return [x for xs in xss for x in xs]
+
+def noise_removal(input_audio, output_audio):
+    command = [
+        'ffmpeg',
+        '-i', input_audio,
+        '-af', 'arnndn=m=cb.rnnn',
+        output_audio
+    ]
+
+    try:
+        print(f'Removing Noise...')
+        subprocess.run(command, check=True)
+        print(f'Noise Removal Complete.')
+    except subprocess.CalledProcessError as e:
+        print(f'Error during conversion: {e}')
+        raise e
 
 def vad_segments(audio_file, aggressiveness=3):
     vad = webrtcvad.Vad(aggressiveness)
@@ -122,8 +139,14 @@ def internal_transcribe(audio):
 
     return result
 
-def transcribe(audio_file, out_audio, out_audio_format, do_speedup = False):
-    edited_audio = edit_vad(audio_file, out_audio, out_audio_format)
+def transcribe(audio_file, out_audio, out_audio_format, do_noise_removal = False, do_speedup = False):
+    in_audio = audio_file
+    
+    if do_noise_removal:
+        noise_removal(in_audio, out_audio)
+        in_audio = out_audio
+
+    edited_audio = edit_vad(in_audio, out_audio, out_audio_format)
 
     result = internal_transcribe(out_audio)
 
