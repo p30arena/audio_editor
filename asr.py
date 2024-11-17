@@ -7,6 +7,7 @@ import wave
 import contextlib
 import numpy as np
 from pydub import AudioSegment
+from pydub.effects import compress_dynamic_range, normalize
 import torch
 import os
 import librosa
@@ -161,13 +162,13 @@ def transcribe(audio_file, out_audio, out_audio_format, do_noise_removal = False
     result = internal_transcribe(out_audio)
 
     if do_speedup:
-        edited_audio, aligned_segments = speedup(result['segments'], edited_audio, out_audio, out_audio_format, 'speedup', 4.0)
+        edited_audio, aligned_segments = speedup(result['segments'], edited_audio, out_audio, out_audio_format, 'speedup', 4.0, True)
         result['segments'] = aligned_segments
         # result = internal_transcribe(out_audio)
 
     return result
 
-def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', gap_speedup_factor=2.0):
+def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', gap_speedup_factor=2.0, enable_cdr_norm=False):
     """
     Speeds up slow words in the audio and adjusts gaps according to the specified handling.
 
@@ -178,6 +179,7 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
     - out_audio_format (str): The format to save the modified audio (e.g., 'wav', 'mp3').
     - gap_handling (str): How to handle gaps between words. Options are 'keep', 'delete', or 'speedup'.
     - gap_speedup_factor (float): The factor by which to speed up gaps if gap_handling is 'speedup'.
+    - enable_cdr_norm (boolean): Volume Correction using compress dynamic range and normalization.
 
     Returns:
     - modified_audio (AudioSegment): The modified audio after processing.
@@ -262,6 +264,20 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
     # Append any remaining audio after the last word
     if last_end_time < len(audio):
         modified_audio += audio[last_end_time:]
+
+    # Apply dynamic range compression
+    compressed_audio = compress_dynamic_range(
+        modified_audio,
+        threshold=-20.0,
+        ratio=4.0,
+        attack=5.0,
+        release=50.0,
+    )
+
+    # Normalize the audio (optional)
+    normalized_audio = normalize(compressed_audio)
+
+    modified_audio = normalized_audio
 
     # Export the modified audio
     modified_audio.export(out_audio, format=out_audio_format)
