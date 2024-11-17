@@ -1,6 +1,7 @@
 import torch
 import json
 import whisper
+import whisperx
 import webrtcvad
 import wave
 import contextlib
@@ -14,6 +15,7 @@ import subprocess
 import copy
 
 whisper_model = None
+align_models = {}
 
 def flatten(xss):
     return [x for xs in xss for x in xs]
@@ -126,9 +128,9 @@ def avg_spoken_words_duration(words, min_word_length = 3):
     return avg_duration
 
 def internal_transcribe(audio):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     global whisper_model
     if not whisper_model:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
         whisper_model = whisper.load_model("turbo", device)
 
     print("Transcribing audio...")
@@ -136,6 +138,13 @@ def internal_transcribe(audio):
         audio,
         word_timestamps=True,
     )
+    global align_models
+    if result["language"] not in align_models:
+        model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
+        align_models[result["language"]] = (model_a, metadata)
+    model_a, metadata = align_models[result["language"]]
+    aligned_segments = whisperx.align(result["segments"], model_a, metadata, whisperx.load_audio(audio), device, return_char_alignments=False)
+    result['segments'] = aligned_segments["segments"]
     print("Transcription complete.")
 
     return result
@@ -221,19 +230,20 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
             gap_start = last_end_time
             gap_end = start
             gap_audio = audio[gap_start:gap_end]
+            duration_ms = gap_end - gap_start
 
             # Handle the gap according to gap_handling parameter
-            if gap_handling == 'keep':
+            if gap_handling == 'keep' or (duration_ms / gap_speedup_factor) < 100: #does not support < 0.1f second segments
                 # Keep the gap as is
                 modified_audio += gap_audio
             elif gap_handling == 'delete':
                 # Skip the gap
-                gap_modif = -(gap_end - gap_start)
+                gap_modif = -duration_ms
             elif gap_handling == 'speedup':
                 # Speed up the gap audio
-                gap_audio = gap_audio.speedup(playback_speed=gap_speedup_factor)
+                gap_audio = gap_audio.speedup(playback_speed=gap_speedup_factor, chunk_size=50, crossfade=25)
                 modified_audio += gap_audio
-                gap_modif = -((gap_end - gap_start) - len(gap_audio))
+                gap_modif = -(duration_ms - len(gap_audio))
             else:
                 raise ValueError(f"Invalid gap_handling value: {gap_handling}. Choose 'keep', 'delete', or 'speedup'.")
 
