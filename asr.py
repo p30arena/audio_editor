@@ -202,7 +202,8 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
         word = entry['word']
         start = entry['start'] * 1000  # Convert to milliseconds
         end = entry['end'] * 1000      # Convert to milliseconds
-        duration = (end - start) / 1000  # Duration in seconds
+        duration_ms = end - start
+        duration = duration_ms / 1000  # Duration in seconds
 
         gap_modif = 0
         word_modif = 0
@@ -218,7 +219,7 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
 
             # Speed up the word audio
             word_audio = word_audio.speedup(playback_speed=playback_speed, chunk_size=50, crossfade=25)
-            word_modif = -((end - start) - len(word_audio))
+            word_modif = -(duration_ms - len(word_audio))
 
         # # Handle any silence or gaps between words
         # if start > last_end_time:
@@ -286,10 +287,10 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
                 if gap_modif != 0:
                     w['start'] += gap_modif
                     w['end'] += gap_modif
-                    cumulative_modif -= gap_modif
+                    cumulative_modif += gap_modif
                 if word_modif != 0:
                     w['end'] += word_modif
-                    cumulative_modif -= word_modif                
+                    cumulative_modif += word_modif                
             words_idx += 1
         s['start'] = s['words'][0]['start']
         s['end'] = s['words'][len(s['words']) - 1]['end']
