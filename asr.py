@@ -150,7 +150,7 @@ def internal_transcribe(audio):
 
     return result
 
-def transcribe(audio_file, out_audio, out_audio_format, do_noise_removal = False, do_speedup = False):
+def transcribe(audio_file, out_audio, out_audio_format, do_noise_removal = False, do_speedup = False, speedup_gaps = False):
     in_audio = audio_file
     
     if do_noise_removal:
@@ -162,13 +162,13 @@ def transcribe(audio_file, out_audio, out_audio_format, do_noise_removal = False
     result = internal_transcribe(out_audio)
 
     if do_speedup:
-        edited_audio, aligned_segments = speedup(result['segments'], edited_audio, out_audio, out_audio_format, 'speedup', 4.0, True)
+        edited_audio, aligned_segments = speedup(result['segments'], edited_audio, out_audio, out_audio_format, 'speedup', 1.0, True)
         result['segments'] = aligned_segments
         # result = internal_transcribe(out_audio)
 
     return result
 
-def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', gap_speedup_factor=2.0, enable_cdr_norm=False):
+def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', gap_max_seconds=1.0, enable_cdr_norm=False):
     """
     Speeds up slow words in the audio and adjusts gaps according to the specified handling.
 
@@ -178,7 +178,7 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
     - out_audio (str): The file path to save the modified audio.
     - out_audio_format (str): The format to save the modified audio (e.g., 'wav', 'mp3').
     - gap_handling (str): How to handle gaps between words. Options are 'keep', 'delete', or 'speedup'.
-    - gap_speedup_factor (float): The factor by which to speed up gaps if gap_handling is 'speedup'.
+    - gap_max_seconds (float): The factor by which to speed up gaps if gap_handling is 'speedup'.
     - enable_cdr_norm (boolean): Volume Correction using compress dynamic range and normalization.
 
     Returns:
@@ -235,8 +235,10 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
             gap_audio = audio[gap_start:gap_end]
             duration_ms = gap_end - gap_start
 
+            factor = duration_ms / (gap_max_seconds * 1000)
+
             # Handle the gap according to gap_handling parameter
-            if gap_handling == 'keep' or (duration_ms / gap_speedup_factor) < 100: #does not support < 0.1f second segments
+            if gap_handling == 'keep' or factor <= 1.0 or (duration_ms / factor) < 100: #does not support < 0.1f second segments
                 # Keep the gap as is
                 modified_audio += gap_audio
             elif gap_handling == 'delete':
@@ -244,7 +246,7 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
                 gap_modif = -duration_ms
             elif gap_handling == 'speedup':
                 # Speed up the gap audio
-                gap_audio = gap_audio.speedup(playback_speed=gap_speedup_factor, chunk_size=50, crossfade=25)
+                gap_audio = gap_audio.speedup(playback_speed=factor, chunk_size=50, crossfade=25)
                 modified_audio += gap_audio
                 gap_modif = -(duration_ms - len(gap_audio))
             else:
