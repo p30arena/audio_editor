@@ -40,7 +40,7 @@ for item in manifest:
     os.makedirs(out_folder)
 
     # Call the transcription function
-    transcription = transcribe(src, out_audio, 'mp3', True)
+    transcription = transcribe(src, out_audio, 'mp3', True, True)
     text = transcription["text"]
     segments = transcription["segments"]
 

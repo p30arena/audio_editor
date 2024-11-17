@@ -11,6 +11,7 @@ import os
 import librosa
 import soundfile as sf
 import subprocess
+import copy
 
 whisper_model = None
 
@@ -151,12 +152,28 @@ def transcribe(audio_file, out_audio, out_audio_format, do_noise_removal = False
     result = internal_transcribe(out_audio)
 
     if do_speedup:
-        edited_audio = speedup(result['segments'], edited_audio, out_audio, out_audio_format, 'speedup', 4.0)
-        result = internal_transcribe(out_audio)
+        edited_audio, aligned_segments = speedup(result['segments'], edited_audio, out_audio, out_audio_format, 'speedup', 4.0)
+        result['segments'] = aligned_segments
+        # result = internal_transcribe(out_audio)
 
     return result
 
 def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', gap_speedup_factor=2.0):
+    """
+    Speeds up slow words in the audio and adjusts gaps according to the specified handling.
+
+    Parameters:
+    - segments (list): A list of segments, each containing words with 'word', 'start', and 'end' keys.
+    - audio (AudioSegment): The original audio loaded using pydub.
+    - out_audio (str): The file path to save the modified audio.
+    - out_audio_format (str): The format to save the modified audio (e.g., 'wav', 'mp3').
+    - gap_handling (str): How to handle gaps between words. Options are 'keep', 'delete', or 'speedup'.
+    - gap_speedup_factor (float): The factor by which to speed up gaps if gap_handling is 'speedup'.
+
+    Returns:
+    - modified_audio (AudioSegment): The modified audio after processing.
+    - copy_segments (list): The segments with adjusted timestamps.
+    """
     print("Speeding-up audio...")
 
     min_word_length = 3
@@ -170,11 +187,16 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
     modified_audio = AudioSegment.empty()
     last_end_time = 0
 
-    for entry in words:
+    modifications = {}
+
+    for i, entry in enumerate(words):
         word = entry['word']
         start = entry['start'] * 1000  # Convert to milliseconds
         end = entry['end'] * 1000      # Convert to milliseconds
         duration = (end - start) / 1000  # Duration in seconds
+
+        gap_modif = 0
+        word_modif = 0
 
         # Extract the audio segment for this word
         word_audio = audio[start:end]
@@ -187,6 +209,7 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
 
             # Speed up the word audio
             word_audio = word_audio.speedup(playback_speed=playback_speed, chunk_size=50, crossfade=25)
+            word_modif = -((end - start) - len(word_audio))
 
         # # Handle any silence or gaps between words
         # if start > last_end_time:
@@ -205,17 +228,25 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
                 modified_audio += gap_audio
             elif gap_handling == 'delete':
                 # Skip the gap
-                pass  # Do not add the gap to modified_audio
+                gap_modif = -(gap_end - gap_start)
             elif gap_handling == 'speedup':
                 # Speed up the gap audio
                 gap_audio = gap_audio.speedup(playback_speed=gap_speedup_factor)
                 modified_audio += gap_audio
+                gap_modif = -((gap_end - gap_start) - len(gap_audio))
             else:
                 raise ValueError(f"Invalid gap_handling value: {gap_handling}. Choose 'keep', 'delete', or 'speedup'.")
 
         # Append the (modified) word audio
         modified_audio += word_audio
         last_end_time = end
+
+        if gap_modif != 0 or word_modif != 0:
+            modifications[i] = {
+                'index': i,
+                'gap_modif': gap_modif / 1000,
+                'word_modif': word_modif / 1000,
+            }
 
     # Append any remaining audio after the last word
     if last_end_time < len(audio):
@@ -224,6 +255,37 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
     # Export the modified audio
     modified_audio.export(out_audio, format=out_audio_format)
 
+    # print(modifications)
+
+    copy_segments = copy.deepcopy(segments)
+    words_idx = 0
+    cumulative_modif = 0
+    # n_mods = 0
+    
+    for s in copy_segments:
+        for w in s['words']:
+            if cumulative_modif != 0:
+                w['start'] += cumulative_modif
+                w['end'] += cumulative_modif
+
+            if words_idx in modifications:
+                # n_mods += 1
+                gap_modif = modifications[words_idx]['gap_modif']
+                word_modif = modifications[words_idx]['word_modif']
+
+                if gap_modif != 0:
+                    w['start'] += gap_modif
+                    w['end'] += gap_modif
+                    cumulative_modif -= gap_modif
+                if word_modif != 0:
+                    w['end'] += word_modif
+                    cumulative_modif -= word_modif                
+            words_idx += 1
+        s['start'] = s['words'][0]['start']
+        s['end'] = s['words'][len(s['words']) - 1]['end']
+
+    # print(n_mods)
+    # print(len(modifications.keys()))
     print("Speed-up complete.")
 
-    return modified_audio
+    return modified_audio, copy_segments
