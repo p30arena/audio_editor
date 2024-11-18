@@ -2,18 +2,17 @@ import torch
 import json
 import whisper
 import whisperx
-import webrtcvad
-import wave
-import contextlib
 import numpy as np
 from pydub import AudioSegment
-from pydub.effects import compress_dynamic_range, normalize
+from pydub.effects import high_pass_filter, low_pass_filter, normalize, compress_dynamic_range
+from pydub.scipy_effects import eq
+from pydub.silence import detect_nonsilent
 import torch
 import os
-import librosa
-import soundfile as sf
 import subprocess
 import copy
+import tempfile
+import shutil
 
 whisper_model = None
 align_models = {}
@@ -21,11 +20,54 @@ align_models = {}
 def flatten(xss):
     return [x for xs in xss for x in xs]
 
-def noise_removal(input_audio, output_audio):
+def enhance_audio(audio_filepath, out_audio, out_audio_format):
+    # Load the audio file
+    audio = AudioSegment.from_file(audio_filepath)
+
+    # High-pass filter at 80 Hz
+    audio = high_pass_filter(audio, cutoff=80)
+
+    # Low-pass filter at 8000 Hz
+    audio = low_pass_filter(audio, cutoff=8000)
+
+    # Equalizer adjustments
+    audio = eq(audio, 300, gain_dB=2.0)  # Slightly boost mid frequencies
+    audio = eq(audio, 6000, gain_dB=-2.0)  # Slightly reduce high frequencies
+
+    # # Apply noise gate
+    # nonsilent_ranges = detect_nonsilent(audio, min_silence_len=1000, silence_thresh=-50) # default is -16
+    # nonsilent_audio = AudioSegment.empty()
+    # for start, end in nonsilent_ranges:
+    #     nonsilent_audio += audio[start:end]
+    # audio = nonsilent_audio
+
+    # Compress dynamic range
+    audio = compress_dynamic_range(
+        audio,
+        threshold=-20.0,
+        ratio=4.0,
+        attack=5.0,
+        release=50.0,
+    )
+
+    # Normalize the audio
+    audio = normalize(audio)
+
+    # Export the processed audio
+    audio.export(out_audio, out_audio_format)
+
+    return audio
+
+def separate_speech(input_audio, output_audio):
+    tmp_file = None
+    if input_audio == output_audio:
+        tmp_file = tempfile.NamedTemporaryFile(delete=False)
+        shutil.copyfile(input_audio, tmp_file.name)
     command = [
         'ffmpeg',
-        '-i', input_audio,
+        '-i', input_audio if not tmp_file else tmp_file.name,
         '-af', 'arnndn=m=cb.rnnn',
+        '-y',
         output_audio
     ]
 
@@ -33,81 +75,14 @@ def noise_removal(input_audio, output_audio):
         print(f'Removing Noise...')
         subprocess.run(command, check=True)
         print(f'Noise Removal Complete.')
+
+        if tmp_file:
+            os.remove(tmp_file.name)
+
+        return AudioSegment.from_file(output_audio)
     except subprocess.CalledProcessError as e:
         print(f'Error during conversion: {e}')
         raise e
-
-def vad_segments(audio_file, aggressiveness=3):
-    vad = webrtcvad.Vad(aggressiveness)
-    audio, sample_rate = librosa.load(audio_file, sr=16000)
-    max_offset = len(audio)
-    frame_duration = 30  # ms
-    frame_size = int(sample_rate * frame_duration / 1000)
-    frames = librosa.util.frame(audio, frame_length=frame_size, hop_length=frame_size).T
-    segments = []
-    offset = 0
-    for frame in frames:
-        is_speech = vad.is_speech((frame * 32767).astype(np.int16).tobytes(), sample_rate)
-        if not is_speech:
-            time_start = offset / sample_rate
-            time_end = (offset + frame_size) / sample_rate
-            segments.append((time_start, time_end))
-        offset += frame_size
-    return segments
-
-def edit_vad(audio_file, out_audio, out_audio_format):
-    print("Detecting non-speech segments...")
-    non_speech_segments = vad_segments(audio_file)
-    print("Detection complete.")
-
-    aggregated_segments = []
-    if non_speech_segments:
-        # Initialize the first segment
-        start_time = non_speech_segments[0][0]
-        end_time = non_speech_segments[0][1]
-
-        for current_start, current_end in non_speech_segments[1:]:
-            if current_start <= end_time + 0.001:  # Allow small overlap/tolerance
-                # Frames are consecutive or overlapping; extend the segment
-                end_time = current_end
-            else:
-                # Gap between frames; save the current segment and start a new one
-                aggregated_segments.append((start_time, end_time))
-                start_time = current_start
-                end_time = current_end
-        # Add the last segment
-        aggregated_segments.append((start_time, end_time))
-
-    non_speech_segments = []
-    for start_time, end_time in aggregated_segments:
-        duration = end_time - start_time
-        if duration >= 1.0:
-            non_speech_segments.append({
-                'start': start_time,
-                'end': end_time,
-                'text': '[Non-speech sound]',
-                'type': 'NonSpeech'
-            })
-
-    audio = AudioSegment.from_file(audio_file)
-    segments_to_keep = []
-    last_end = 0
-
-    for section in non_speech_segments:
-        start_ms = int(section['start'] * 1000)
-        end_ms = int(section['end'] * 1000)
-        if start_ms > last_end:
-            segments_to_keep.append(audio[last_end:start_ms])
-        last_end = end_ms
-
-    if last_end < len(audio):
-        segments_to_keep.append(audio[last_end:])
-
-    edited_audio = sum(segments_to_keep)
-    edited_audio.export(out_audio, format=out_audio_format)
-    print(f"Audio editing complete. Edited file saved as '{out_audio}'.")
-
-    return edited_audio
 
 def avg_spoken_words_duration(words, min_word_length = 3):
     # Collect durations of words with min_word_length
@@ -150,21 +125,31 @@ def internal_transcribe(audio):
 
     return result
 
-def transcribe(audio_file, out_audio, out_audio_format, do_noise_removal = False, do_speedup = False, speedup_gaps = False):
+def transcribe(audio_file, out_audio, out_audio_format, do_enhance = False, do_separate_speech = False, do_speedup = False, speedup_gaps = False):
     in_audio = audio_file
-    
-    if do_noise_removal:
-        noise_removal(in_audio, out_audio)
+    edited_audio = None
+
+    if do_enhance:
+        edited_audio = enhance_audio(in_audio, out_audio, out_audio_format)
         in_audio = out_audio
 
-    edited_audio = edit_vad(in_audio, out_audio, out_audio_format)
+    if do_separate_speech:
+        edited_audio = separate_speech(in_audio, out_audio)
+        in_audio = out_audio
 
-    result = internal_transcribe(out_audio)
+    result = internal_transcribe(in_audio)
 
     if do_speedup:
-        edited_audio, aligned_segments = speedup(result['segments'], edited_audio, out_audio, out_audio_format, 'speedup', 1.0, True)
+        edited_audio, aligned_segments = speedup(
+            result['segments'],
+            AudioSegment.from_file(in_audio) if not edited_audio else edited_audio,
+            out_audio,
+            out_audio_format,
+            'speedup',
+            1.0,
+            True,
+        )
         result['segments'] = aligned_segments
-        # result = internal_transcribe(out_audio)
 
     return result
 
@@ -266,20 +251,6 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
     # Append any remaining audio after the last word
     if last_end_time < len(audio):
         modified_audio += audio[last_end_time:]
-
-    # Apply dynamic range compression
-    compressed_audio = compress_dynamic_range(
-        modified_audio,
-        threshold=-20.0,
-        ratio=4.0,
-        attack=5.0,
-        release=50.0,
-    )
-
-    # Normalize the audio (optional)
-    normalized_audio = normalize(compressed_audio)
-
-    modified_audio = normalized_audio
 
     # Export the modified audio
     modified_audio.export(out_audio, format=out_audio_format)

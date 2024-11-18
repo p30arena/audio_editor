@@ -15,7 +15,7 @@ dst_folder = './dst/'
 with open(os.path.join(src_folder, 'manifest.json'), 'r', encoding='utf-8') as f:
     manifest = json.load(f)
 
-for item in manifest:
+for item in manifest['items']:
     title = item.get('title')
     filename = item.get('filename')
     if not title or not filename:
@@ -40,7 +40,15 @@ for item in manifest:
     os.makedirs(out_folder)
 
     # Call the transcription function
-    transcription = transcribe(src, out_audio, 'mp3', True, True)
+    transcription = transcribe(
+        src,
+        out_audio,
+        'mp3',
+        do_enhance=True if 'do_enhance' not in manifest else manifest['do_enhance'],
+        do_speedup=True if 'do_speedup' not in manifest else manifest['do_speedup'],
+        speedup_gaps=True if 'speedup_gaps' not in manifest else manifest['speedup_gaps'],
+        do_separate_speech=True if 'do_separate_speech' not in manifest else manifest['do_separate_speech']
+    )
     text = transcription["text"]
     segments = transcription["segments"]
 
