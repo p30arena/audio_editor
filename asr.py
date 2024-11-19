@@ -6,19 +6,61 @@ import numpy as np
 from pydub import AudioSegment
 from pydub.effects import high_pass_filter, low_pass_filter, normalize, compress_dynamic_range
 from pydub.scipy_effects import eq
-from pydub.silence import detect_nonsilent
-import torch
 import os
 import subprocess
 import copy
 import tempfile
 import shutil
+# import noisereduce as nr
+# import librosa
+# import soundfile as sf
+# from speechbrain.pretrained import SepformerSeparation as separator
+# import torchaudio
 
 whisper_model = None
 align_models = {}
 
 def flatten(xss):
     return [x for xs in xss for x in xs]
+
+# def use_noisereduce(audio_filepath, out_audio):
+#     y, sr = librosa.load(audio_filepath, sr=None, mono=False)
+#     reduced_noise = nr.reduce_noise(y=y, sr=sr)
+#     sf.write(out_audio, reduced_noise, sr)
+
+# def use_noisereduce(audio_filepath, out_audio):
+#     # model = separator.from_hparams(source="speechbrain/sepformer-wham16k-enhancement")
+#     model = separator.from_hparams(source="speechbrain/sepformer-dns4-16k-enhancement")
+#     est_sources = model.separate_file(path=audio_filepath)
+#     torchaudio.save(out_audio, est_sources[:, :, 0].detach().cpu(), 16000)
+
+# afftdn removes part of speech
+
+# def use_noisereduce(input_audio, output_audio):
+#     tmp_file = None
+#     if input_audio == output_audio:
+#         tmp_file = tempfile.NamedTemporaryFile(delete=False)
+#         shutil.copyfile(input_audio, tmp_file.name)
+#     command = [
+#         'ffmpeg',
+#         '-i', input_audio if not tmp_file else tmp_file.name,
+#         '-af', 'afftdn',
+#         '-y',
+#         output_audio
+#     ]
+
+#     try:
+#         print(f'Removing Noise...')
+#         subprocess.run(command, check=True)
+#         print(f'Noise Removal Complete.')
+
+#         if tmp_file:
+#             os.remove(tmp_file.name)
+
+#         return AudioSegment.from_file(output_audio)
+#     except subprocess.CalledProcessError as e:
+#         print(f'Error during conversion: {e}')
+#         raise e
 
 def enhance_audio(audio_filepath, out_audio, out_audio_format):
     # Load the audio file
@@ -33,13 +75,6 @@ def enhance_audio(audio_filepath, out_audio, out_audio_format):
     # Equalizer adjustments
     audio = eq(audio, 300, gain_dB=2.0)  # Slightly boost mid frequencies
     audio = eq(audio, 6000, gain_dB=-2.0)  # Slightly reduce high frequencies
-
-    # # Apply noise gate
-    # nonsilent_ranges = detect_nonsilent(audio, min_silence_len=1000, silence_thresh=-50) # default is -16
-    # nonsilent_audio = AudioSegment.empty()
-    # for start, end in nonsilent_ranges:
-    #     nonsilent_audio += audio[start:end]
-    # audio = nonsilent_audio
 
     # Compress dynamic range
     audio = compress_dynamic_range(
@@ -130,6 +165,8 @@ def transcribe(audio_file, out_audio, out_audio_format, do_enhance = False, do_s
     edited_audio = None
 
     if do_enhance:
+        # use_noisereduce(in_audio, out_audio)
+        # in_audio = out_audio
         edited_audio = enhance_audio(in_audio, out_audio, out_audio_format)
         in_audio = out_audio
 
@@ -172,6 +209,8 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
     """
     print("Speeding-up audio...")
 
+    gap_max_ms = gap_max_seconds * 1000
+
     min_word_length = 3
     words = flatten([s['words'] for s in segments])
     avg_duration = avg_spoken_words_duration(words)
@@ -186,6 +225,9 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
     modifications = {}
 
     for i, entry in enumerate(words):
+        if 'start' not in entry:
+            raise ValueError("Transcription is Faulty.")
+
         word = entry['word']
         start = entry['start'] * 1000  # Convert to milliseconds
         end = entry['end'] * 1000      # Convert to milliseconds
@@ -220,7 +262,7 @@ def speedup(segments, audio, out_audio, out_audio_format, gap_handling='keep', g
             gap_audio = audio[gap_start:gap_end]
             duration_ms = gap_end - gap_start
 
-            factor = duration_ms / (gap_max_seconds * 1000)
+            factor = duration_ms / gap_max_ms
 
             # Handle the gap according to gap_handling parameter
             if gap_handling == 'keep' or factor <= 1.0 or (duration_ms / factor) < 100: #does not support < 0.1f second segments
