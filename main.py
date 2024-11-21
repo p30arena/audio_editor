@@ -19,8 +19,9 @@ for item in manifest['items']:
     key = item.get('key')
     title = item.get('title')
     files_list = item.get('filename')
-    if not key or not title or not files_list:
-        print("Item missing 'key' or title' or 'files_list'. Skipping item.")
+    if type(key) is not int or not title or not files_list:
+        print("Item missing 'key' or title' or 'filename'. Skipping item.")
+        print(item)
         continue
     
     result_files_meta = []
