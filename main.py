@@ -16,15 +16,16 @@ with open(os.path.join(src_folder, 'manifest.json'), 'r', encoding='utf-8') as f
     manifest = json.load(f)
 
 for item in manifest['items']:
+    key = item.get('key')
     title = item.get('title')
     files_list = item.get('filename')
-    if not title or not files_list:
-        print("Item missing 'title' or 'files_list'. Skipping item.")
+    if not key or not title or not files_list:
+        print("Item missing 'key' or title' or 'files_list'. Skipping item.")
         continue
     
     result_files_meta = []
     cover_image_path = None
-    out_folder = os.path.join(dst_folder, title.replace(' ', '_'))
+    out_folder = os.path.join(dst_folder, str(key))
     for filename in files_list:
         try:
             src = os.path.join(src_folder, filename)

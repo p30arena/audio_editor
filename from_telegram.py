@@ -13,7 +13,7 @@ with open(args.input, 'r', encoding='utf-8') as in_file:
 
 mapped_items = []
 
-for it in items:
+for key, it in enumerate(items):
     title = it['title'] #str
     filename = it['audio_file'] #list
 
@@ -22,6 +22,7 @@ for it in items:
         filename[i] = os.path.join(args.filesbasepath, f)
 
     mapped_items.append({
+        'key': key,
         'title': title,
         'filename': filename,
     })
