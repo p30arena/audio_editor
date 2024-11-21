@@ -69,7 +69,7 @@ Summarize it so it fits a line or two.
 
 def correct_transcription(text):
     try:
-        print('Fixing spellings...')
+        print('Fixing transcription...')
 
         completion = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -85,7 +85,7 @@ Do not remove or alter words unless a clear correction is available.
 
         event = completion.choices[0].message.content
 
-        print('Fixing of spelling complete.')
+        print('Fixing of transcription complete.')
 
         return event
     except Exception as e:
@@ -101,7 +101,7 @@ def correct_transcription_st(text):
         words: list[CorrectionWord]
     
     try:
-        print('Fixing spellings...')
+        print('Fixing transcription...')
 
         completion = client.beta.chat.completions.parse(
             model="gpt-4o-mini",
@@ -118,7 +118,7 @@ Do not remove or alter words unless a clear correction is available.
 
         event = completion.choices[0].message.parsed
 
-        print('Fixing of spelling complete.')
+        print('Fixing of transcription complete.')
 
         return event
     except Exception as e:

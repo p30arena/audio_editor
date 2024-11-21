@@ -2,6 +2,7 @@
 import os
 import json
 from glob import glob
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,6 +12,7 @@ from ai import correct_transcription_st, summarize_transcription
 dst_folder = './dst/'
 
 for folder in glob(os.path.join(dst_folder, '*/')):
+    print("processing " + folder)
     metadata_filepath = os.path.join(folder, 'metadata.json')
     if not os.path.isfile(metadata_filepath):
         print('metadata not found')
@@ -19,14 +21,16 @@ for folder in glob(os.path.join(dst_folder, '*/')):
     with open(metadata_filepath, 'r', encoding='utf-8') as meta_file:
         metadata = json.load(meta_file)
     
+    print(" - has " + len(metadata["files"]) + " files")
     for f in metadata["files"]:
+        print(" - processing " + f["filename"])
         try:
-            correction_json_filepath = os.path.join(folder, f["filename"] + "-correction.json")
+            correction_json_filepath = os.path.join(folder, Path(f["filename"]).stem + "-correction.json")
             with open(correction_json_filepath, 'r', encoding='utf-8') as correction_json_file:
                 correction_json = json.load(correction_json_file)
             
             transcription_text = correction_json["text"]
-            correction_result = correct_transcription_st(text)
+            correction_result = correct_transcription_st(transcription_text)
             corrected_text = correction_result.corrected_transcription
             summary = summarize_transcription(corrected_text)
 
