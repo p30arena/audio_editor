@@ -75,9 +75,9 @@ def correct_transcription(text):
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": """
-You are provided by a transcription of an audio.
-Correct the words that are misspelled or transcribed incorrectly, don't remove the words that you don't have replacement for.
-Don't respond anything other than the correction of the transcription.
+You are given a transcription of an audio recording.
+Correct any misspelled or inaccurately transcribed words while preserving the original tone, tenses, and formality/informality of the text.
+Do not remove or alter words unless a clear correction is available.
                 """},
                 {"role": "user", "content": text},
             ],
@@ -107,8 +107,9 @@ def correct_transcription_st(text):
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": """
-You are provided by a transcription of an audio.
-Correct the words that are misspelled or transcribed incorrectly, don't remove the words that you don't have replacement for.
+You are given a transcription of an audio recording.
+Correct any misspelled or inaccurately transcribed words while preserving the original tone, tenses, and formality/informality of the text.
+Do not remove or alter words unless a clear correction is available.
                 """},
                 {"role": "user", "content": text},
             ],
