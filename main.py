@@ -24,11 +24,11 @@ for item in manifest['items']:
     
     result_files_meta = []
     cover_image_path = None
+    out_folder = os.path.join(dst_folder, title.replace(' ', '_'))
     for filename in files_list:
         try:
             src = os.path.join(src_folder, filename)
             base_filename = Path(filename).stem
-            out_folder = os.path.join(dst_folder, title.replace(' ', '_'))  # Replace spaces with underscores
             out_audio_basename = base_filename + '.mp3'
             out_audio = os.path.join(out_folder, out_audio_basename)
             out_corrected_text = os.path.join(out_folder, base_filename + '-correction.json')
