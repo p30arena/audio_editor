@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))) # for importing ai
 
 from ai import gen_cover_image
 from post_processing import get_result_folder, get_metadata, store_metadata, get_correction_json, store_correction_json
