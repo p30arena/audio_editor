@@ -8,6 +8,9 @@ dst_folder = './dst/'
 def list_result_folders():
     return glob(os.path.join(dst_folder, '*/'))
 
+def get_result_folder(key):
+    return os.path.join(dst_folder, key)
+
 def get_metadata_filepath(folder):
     return os.path.join(folder, 'metadata.json')
 

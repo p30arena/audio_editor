@@ -1,4 +1,3 @@
-# post processing, enhance transcriptions corrections
 import os
 import json
 from pathlib import Path
@@ -9,13 +8,11 @@ load_dotenv()
 from ai import correct_transcription_st, summarize_transcription
 from post_processing import list_result_folders, get_metadata, store_metadata, get_correction_json, store_correction_json
 
-dst_folder = './dst/'
-
 for folder in list_result_folders():
     print("processing " + folder)
-    metadata = get_metadata()
+    metadata = get_metadata(folder)
     
-    print(" - has " + len(metadata["files"]) + " files")
+    print(f" - has {len(metadata['files'])} files")
     for f in metadata["files"]:
         print(" - processing " + f["filename"])
         try:

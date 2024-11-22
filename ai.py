@@ -15,9 +15,10 @@ def gen_cover_image(dest_folder, title, summary):
         print('Generating image...')
 
         prompt = f"""
-Create a realistic, cover image for podcast, representing the following Title and Summary.
+Create a realistic, cover image for an audio file, representing the following Title and Summary.
 It should not contain any text, labels, borders, measurements nor design elements of any kind.
 The image should be suitable for digital printing without any instructional or guiding elements.
+Be careful about the holy figures and people faces, do not harass religions.
 
 \nTitle: {title}\n\nSummary: {summary}\n
 """
