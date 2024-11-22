@@ -2,6 +2,9 @@ import os
 import json
 from glob import glob
 from pathlib import Path
+import difflib
+import re
+from Levenshtein import distance as levenshtein_distance  # Requires python-Levenshtein library
 
 src_folder = './src/'
 dst_folder = './dst/'
@@ -86,3 +89,54 @@ def store_aligned_segments_jsonl(folder, f, new_aligned_segments_jsonl):
             line = json.dumps(item)
             aligned_segments_jsonl_file.write(line)
             aligned_segments_jsonl_file.write('\n')
+
+def find_closest_match(query_string, search_string, m_coeff = 0.5):
+    matcher = difflib.SequenceMatcher(None, search_string, query_string)
+    match = matcher.find_longest_match(0, len(search_string), 0, len(query_string))
+
+    if match.size == 0 or match.size < len(query_string) * m_coeff:
+        return None  # No match found
+
+    start_index, end_index = match.a, match.a + match.size
+    return search_string[start_index:end_index]
+
+def replace_arabic_with_farsi(text):
+    """Replaces common Arabic characters with their Farsi equivalents.
+
+    Args:
+        text: The input text string.
+
+    Returns:
+        The text with replaced characters.
+    """
+
+    replacements = {
+        "ي": "ی",
+        "ك": "ک",
+        # Add more replacements as needed
+    }
+
+    for arabic, farsi in replacements.items():
+        text = re.sub(re.escape(arabic), farsi, text)
+
+    return text
+
+def find_closest_substrings(query_string, search_string, max_distance, prefix=False):
+    len_query = len(query_string)
+    len_search = len(search_string)
+    min_distance = None
+    closest_substring = None
+    closest_index = None
+
+    for i in range(len_search - len_query + 1):
+        substring = search_string[i:i + len_query + 1]
+        distance = levenshtein_distance(query_string, substring)
+        if prefix:
+            if substring[0] != query_string[0]:
+                continue
+        if min_distance is None or distance < min_distance:
+            min_distance = distance
+            closest_substring = substring
+            closest_index = i
+            # Since we want the first minimal, we don't update if distance is equal
+    return closest_substring

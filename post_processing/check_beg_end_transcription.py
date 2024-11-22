@@ -15,7 +15,7 @@ from post_processing import get_metadata, store_metadata, get_correction_json, s
 from post_processing import get_correction_json_filepath, get_segments_jsonl_filepath, get_aligned_segments_jsonl_filepath
 from post_processing import get_correction_json_filepath, get_segments_jsonl_filepath, get_aligned_segments_jsonl_filepath
 from post_processing import get_segments_jsonl, get_aligned_segments_jsonl, store_segments_jsonl, store_aligned_segments_jsonl
-from post_processing import get_manifest
+from post_processing import get_manifest, find_closest_match, replace_arabic_with_farsi, find_closest_substrings
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-k", "--key", required=False, help="folder key")
@@ -45,31 +45,58 @@ for folder in result_folders:
         print(" - processing " + f["filename"])
         try:
             transcription_text = f["text"]
+            # transcription_text = replace_arabic_with_farsi(transcription_text)
             
             if i == 0:
                 if not f["does_begin_with"]:
-                    does_begin_with = transcription_text[:100].find(manifest['does_begin_with']) > -1
-                    print("does_begin_with", transcription_text[:100])
+                    text = transcription_text[:len(manifest['does_begin_with']) * 2]
+                    does_begin_with = text.find(manifest['does_begin_with']) > -1
+                    print("does_begin_with", text)
                     print("now: ", str(does_begin_with))
                     cnt_no_beg += 1
                     if does_begin_with:
                         cnt_new_ok_beg += 1
                         f["does_begin_with"] = True
+                    else:
+                        # closest_match = find_closest_match(manifest['does_begin_with'], text, 0.6)
+                        # if closest_match:
+                        #     print(" # beg closest_match", closest_match)
+                        closest_match = find_closest_substrings(
+                            manifest['does_begin_with'],
+                            text,
+                            len(manifest['does_begin_with']) / 2,
+                            prefix=True,
+                        )
+                        if closest_match:
+                            print(" # beg closest_match", closest_match)
             if i == len_files - 1:
                 if not f["does_end_with"]:
-                    does_end_with = transcription_text[-100:].find(manifest['does_end_with']) > -1
-                    print("does_end_with", transcription_text[-100:])
+                    text = transcription_text[-(len(manifest['does_end_with']) * 2):]
+                    does_end_with = text.find(manifest['does_end_with']) > -1
+                    print("does_end_with", text)
                     print("now: ", str(does_end_with))
                     cnt_no_end += 1
                     if does_end_with:
                         cnt_new_ok_end += 1
                         f["does_end_with"] = True
+                    else:
+                        # closest_match = find_closest_match(manifest['does_end_with'], text, 0.6)
+                        # if closest_match:
+                        #     print(" # end closest_match", closest_match)
+                        closest_match = find_closest_substrings(
+                            manifest['does_end_with'],
+                            text,
+                            len(manifest['does_end_with']) / 2,
+                            prefix=True,
+                        )
+                        if closest_match:
+                            print(" # end closest_match", closest_match)
         except Exception as e:
             print(e)
     
-    print('cnt_no_beg', cnt_no_beg)
-    print('cnt_no_end', cnt_no_end)
-    print('cnt_new_ok_beg', cnt_new_ok_beg)
-    print('cnt_new_ok_end', cnt_new_ok_end)
-    
     store_metadata(folder, metadata)
+
+print('cnt_no_beg', cnt_no_beg)
+print('cnt_no_end', cnt_no_end)
+print('cnt_new_ok_beg', cnt_new_ok_beg)
+print('cnt_new_ok_end', cnt_new_ok_end)
