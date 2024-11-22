@@ -3,6 +3,7 @@ import json
 from glob import glob
 from pathlib import Path
 
+src_folder = './src/'
 dst_folder = './dst/'
 
 def list_result_folders():
@@ -13,6 +14,15 @@ def get_result_folder(key):
 
 def get_metadata_filepath(folder):
     return os.path.join(folder, 'metadata.json')
+
+def get_manifest_filepath():
+    return os.path.join(src_folder, 'manifest.json')
+
+def get_manifest():
+    manifest_filepath = get_manifest_filepath()
+    with open(manifest_filepath, 'r', encoding='utf-8') as meta_file:
+        manifest = json.load(meta_file)
+    return manifest
 
 def get_metadata(folder):
     metadata_filepath = get_metadata_filepath(folder)
