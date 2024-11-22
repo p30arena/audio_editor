@@ -28,6 +28,12 @@ def store_metadata(folder, metadata):
 def get_correction_json_filepath(folder, f):
     return os.path.join(folder, Path(f["filename"]).stem + "-correction.json")
 
+def get_segments_jsonl_filepath(folder, f):
+    return os.path.join(folder, Path(f["filename"]).stem + "-segments.jsonl")
+
+def get_aligned_segments_jsonl_filepath(folder, f):
+    return os.path.join(folder, Path(f["filename"]).stem + "-aligned-segments.jsonl")
+
 def get_correction_json(folder, f):
     correction_json_filepath = get_correction_json_filepath(folder, f)
     with open(correction_json_filepath, 'r', encoding='utf-8') as correction_json_file:
@@ -38,3 +44,35 @@ def store_correction_json(folder, f, new_correction_data):
     correction_json_filepath = get_correction_json_filepath(folder, f)
     with open(correction_json_filepath, 'w', encoding='utf-8') as correction_json_file:
         json.dump(new_correction_data, correction_json_file)
+
+def get_segments_jsonl(folder, f):
+    segments_jsonl_filepath = get_segments_jsonl_filepath(folder, f)
+    with open(segments_jsonl_filepath, 'r', encoding='utf-8') as segments_jsonl_file:
+        segments_jsonl = []
+        for line in segments_jsonl_file.read().strip().split('\n'):
+            segments_jsonl.append(json.loads(line))
+    return segments_jsonl
+
+def store_segments_jsonl(folder, f, new_segments_jsonl):
+    segments_jsonl_filepath = get_segments_jsonl_filepath(folder, f)
+    with open(segments_jsonl_filepath, 'w', encoding='utf-8') as segments_jsonl_file:
+        for item in new_segments_jsonl:
+            line = json.dumps(item)
+            segments_jsonl_file.write(line)
+            segments_jsonl_file.write('\n')
+
+def get_aligned_segments_jsonl(folder, f):
+    aligned_segments_jsonl_filepath = get_aligned_segments_jsonl_filepath(folder, f)
+    with open(aligned_segments_jsonl_filepath, 'r', encoding='utf-8') as aligned_segments_jsonl_file:
+        aligned_segments_jsonl = []
+        for line in aligned_segments_jsonl_file.read().strip().split('\n'):
+            aligned_segments_jsonl.append(json.loads(line))
+    return aligned_segments_jsonl
+
+def store_aligned_segments_jsonl(folder, f, new_aligned_segments_jsonl):
+    aligned_segments_jsonl_filepath = get_aligned_segments_jsonl_filepath(folder, f)
+    with open(aligned_segments_jsonl_filepath, 'w', encoding='utf-8') as aligned_segments_jsonl_file:
+        for item in new_aligned_segments_jsonl:
+            line = json.dumps(item)
+            aligned_segments_jsonl_file.write(line)
+            aligned_segments_jsonl_file.write('\n')
